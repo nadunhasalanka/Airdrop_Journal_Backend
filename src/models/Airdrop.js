@@ -110,7 +110,13 @@ const airdropSchema = new mongoose.Schema({
     type: String,
     trim: true,
     lowercase: true
-  }]
+  }],
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  },
 }, {
   timestamps: true, // Adds createdAt and updatedAt automatically
   toJSON: { virtuals: true },

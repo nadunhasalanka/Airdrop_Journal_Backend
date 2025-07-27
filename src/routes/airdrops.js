@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult, param } = require('express-validator');
 const Airdrop = require('../models/Airdrop');
+const { protect, optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -75,7 +76,8 @@ const airdropValidation = [
 ];
 
 // GET /api/airdrops - Get all airdrops with filtering and pagination
-router.get('/', async (req, res) => {
+// Public endpoint - anyone can view airdrops
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const {
       status,
@@ -225,12 +227,20 @@ router.get('/:id',
 );
 
 // POST /api/airdrops - Create new airdrop
+// Protected endpoint - requires authentication
 router.post('/',
+  protect,
   airdropValidation,
   handleValidationErrors,
   async (req, res) => {
     try {
-      const airdrop = new Airdrop(req.body);
+      // Add creator information to the airdrop
+      const airdropData = {
+        ...req.body,
+        createdBy: req.user._id
+      };
+      
+      const airdrop = new Airdrop(airdropData);
       const savedAirdrop = await airdrop.save();
       
       res.status(201).json({
@@ -251,12 +261,32 @@ router.post('/',
 );
 
 // PUT /api/airdrops/:id - Update airdrop
+// Protected endpoint - only creator can update
 router.put('/:id',
+  protect,
   param('id').isMongoId().withMessage('Invalid airdrop ID'),
   airdropValidation,
   handleValidationErrors,
   async (req, res) => {
     try {
+      // First check if airdrop exists and user owns it
+      const existingAirdrop = await Airdrop.findById(req.params.id);
+      
+      if (!existingAirdrop || !existingAirdrop.isActive) {
+        return res.status(404).json({
+          success: false,
+          message: 'Airdrop not found'
+        });
+      }
+      
+      // Check if user owns this airdrop
+      if (!existingAirdrop.createdBy.equals(req.user._id)) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only update your own airdrops'
+        });
+      }
+      
       const airdrop = await Airdrop.findByIdAndUpdate(
         req.params.id,
         req.body,
