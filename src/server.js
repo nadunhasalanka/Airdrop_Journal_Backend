@@ -4,11 +4,14 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 const mongoose = require('mongoose');
 require('dotenv').config();
 
 // Import routes
 const airdropRoutes = require('./routes/airdrops');
+const userRoutes = require('./routes/users');
+const authRoutes = require('./routes/auth');
 
 // Create Express app
 const app = express();
@@ -42,9 +45,12 @@ app.use(morgan('combined'));
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(cookieParser());
 
 // Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/airdrops', airdropRoutes);
+app.use('/api/users', userRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -62,10 +68,23 @@ app.get('/api', (req, res) => {
   res.json({
     name: 'Airdrop Journal API',
     version: '1.0.0',
-    description: 'Backend API for managing crypto airdrops',
+    description: 'Backend API for managing crypto airdrops with custom authentication',
     endpoints: {
       health: '/health',
-      airdrops: '/api/airdrops'
+      auth: '/api/auth',
+      airdrops: '/api/airdrops',
+      users: '/api/users'
+    },
+    authEndpoints: {
+      signup: 'POST /api/auth/signup',
+      login: 'POST /api/auth/login',
+      logout: 'POST /api/auth/logout',
+      me: 'GET /api/auth/me',
+      forgotPassword: 'POST /api/auth/forgot-password',
+      resetPassword: 'PATCH /api/auth/reset-password/:token',
+      updatePassword: 'PATCH /api/auth/update-password',
+      verifyEmail: 'POST /api/auth/verify-email/:token',
+      resendVerification: 'POST /api/auth/resend-verification'
     }
   });
 });
@@ -122,14 +141,14 @@ const connectDatabase = async () => {
       socketTimeoutMS: 45000,
     });
 
-    console.log('✅ MongoDB connected successfully');
+    console.log('MongoDB connected successfully');
     
     // Log database info
     console.log(`📊 Database: ${mongoose.connection.name}`);
     console.log(`🔗 Host: ${mongoose.connection.host}:${mongoose.connection.port}`);
     
   } catch (error) {
-    console.error('❌ MongoDB connection failed:', error.message);
+    console.error('MongoDB connection failed:', error.message);
     process.exit(1);
   }
 };
@@ -150,7 +169,7 @@ const startServer = async () => {
     });
 
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    console.error('Failed to start server:', error);
     process.exit(1);
   }
 };
@@ -161,7 +180,7 @@ const gracefulShutdown = (signal) => {
   
   // Close database connection
   mongoose.connection.close(() => {
-    console.log('✅ Database connection closed');
+    console.log('Database connection closed');
     process.exit(0);
   });
 
@@ -178,12 +197,12 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
+  console.error('Uncaught Exception:', error);
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
   process.exit(1);
 });
 
