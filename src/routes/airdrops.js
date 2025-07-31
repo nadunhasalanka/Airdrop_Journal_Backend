@@ -1,9 +1,62 @@
 const express = require('express');
 const { body, validationResult, param } = require('express-validator');
 const Airdrop = require('../models/Airdrop');
+const Task = require('../models/Task');
+const UserTag = require('../models/UserTag');
 const { protect, optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Helper function to create daily task for airdrop
+const createDailyTaskForAirdrop = async (airdrop, userId) => {
+  try {
+    // Check if daily task already exists for this airdrop
+    const existingTask = await Task.findOne({
+      airdrop: airdrop._id,
+      user: userId,
+      isDaily: true
+    });
+
+    if (existingTask) {
+      return existingTask; // Don't create duplicate daily tasks
+    }
+
+    // Create daily task
+    const taskData = {
+      title: airdrop.dailyTaskNote || `Daily task for ${airdrop.name}`,
+      description: airdrop.description,
+      project: airdrop.name,
+      airdrop: airdrop._id,
+      user: userId,
+      isDaily: true,
+      category: airdrop.type || 'Mainnet',
+      priority: 'Medium',
+      estimatedTime: 15,
+      difficulty: 'Easy'
+    };
+
+    const task = new Task(taskData);
+    const savedTask = await task.save();
+    return savedTask;
+  } catch (error) {
+    console.error('Error creating daily task for airdrop:', error);
+    throw error;
+  }
+};
+
+// Helper function to remove daily task for airdrop
+const removeDailyTaskForAirdrop = async (airdropId, userId) => {
+  try {
+    await Task.deleteMany({
+      airdrop: airdropId,
+      user: userId,
+      isDaily: true
+    });
+  } catch (error) {
+    console.error('Error removing daily task for airdrop:', error);
+    throw error;
+  }
+};
 
 // Validation middleware
 const handleValidationErrors = (req, res, next) => {
@@ -28,10 +81,6 @@ const airdropValidation = [
     .trim()
     .isLength({ min: 1, max: 1000 })
     .withMessage('Description must be between 1 and 1000 characters'),
-  body('status')
-    .optional()
-    .isIn(['upcoming', 'active', 'completed', 'ended'])
-    .withMessage('Status must be one of: upcoming, active, completed, ended'),
   body('startDate')
     .optional()
     .isISO8601()
@@ -61,10 +110,6 @@ const airdropValidation = [
     .optional()
     .matches(/^https?:\/\/(www\.)?t\.me\/.+/)
     .withMessage('Telegram must be a valid Telegram URL'),
-  body('priority')
-    .optional()
-    .isInt({ min: 1, max: 5 })
-    .withMessage('Priority must be between 1 and 5'),
   body('requirements')
     .optional()
     .isArray()
@@ -75,9 +120,9 @@ const airdropValidation = [
     .withMessage('Tags must be an array')
 ];
 
-// GET /api/airdrops - Get all airdrops with filtering and pagination
-// Public endpoint - anyone can view airdrops
-router.get('/', optionalAuth, async (req, res) => {
+// GET /api/airdrops - Get user's airdrops with filtering and pagination
+// Protected endpoint - returns only user's airdrops
+router.get('/', protect, async (req, res) => {
   try {
     const {
       status,
@@ -87,11 +132,14 @@ router.get('/', optionalAuth, async (req, res) => {
       limit = 10,
       sortBy = 'createdAt',
       sortOrder = 'desc',
-      search
+      search,
+      tags
     } = req.query;
 
-    // Build query object
-    const query = { isActive: true };
+    // Build query object - only show user's airdrops
+    const query = { 
+      user: req.user._id 
+    };
     
     if (status) {
       query.status = status;
@@ -113,6 +161,12 @@ router.get('/', optionalAuth, async (req, res) => {
       ];
     }
 
+    // Filter by tags if provided
+    if (tags) {
+      const tagArray = Array.isArray(tags) ? tags : [tags];
+      query.tags = { $in: tagArray.map(tag => tag.toLowerCase()) };
+    }
+
     // Calculate pagination
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
@@ -127,7 +181,8 @@ router.get('/', optionalAuth, async (req, res) => {
       Airdrop.find(query)
         .sort(sort)
         .skip(skip)
-        .limit(limitNum),
+        .limit(limitNum)
+        .populate('user', 'firstName lastName email'),
       Airdrop.countDocuments(query)
     ]);
 
@@ -156,11 +211,15 @@ router.get('/', optionalAuth, async (req, res) => {
   }
 });
 
-// GET /api/airdrops/stats - Get airdrop statistics
-router.get('/stats', async (req, res) => {
+// GET /api/airdrops/stats - Get user's airdrop statistics
+router.get('/stats', protect, async (req, res) => {
   try {
     const stats = await Airdrop.aggregate([
-      { $match: { isActive: true } },
+      { 
+        $match: { 
+          user: req.user._id 
+        } 
+      },
       {
         $group: {
           _id: '$status',
@@ -169,7 +228,9 @@ router.get('/stats', async (req, res) => {
       }
     ]);
 
-    const totalAirdrops = await Airdrop.countDocuments({ isActive: true });
+    const totalAirdrops = await Airdrop.countDocuments({ 
+      user: req.user._id 
+    });
 
     const formattedStats = {
       total: totalAirdrops,
@@ -195,15 +256,19 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-// GET /api/airdrops/:id - Get single airdrop by ID
+// GET /api/airdrops/:id - Get single airdrop by ID (user's own airdrop only)
 router.get('/:id', 
+  protect,
   param('id').isMongoId().withMessage('Invalid airdrop ID'),
   handleValidationErrors,
   async (req, res) => {
     try {
-      const airdrop = await Airdrop.findById(req.params.id);
+      const airdrop = await Airdrop.findOne({
+        _id: req.params.id,
+        user: req.user._id
+      }).populate('user', 'firstName lastName email');
       
-      if (!airdrop || !airdrop.isActive) {
+      if (!airdrop) {
         return res.status(404).json({
           success: false,
           message: 'Airdrop not found'
@@ -237,11 +302,41 @@ router.post('/',
       // Add creator information to the airdrop
       const airdropData = {
         ...req.body,
-        createdBy: req.user._id
+        user: req.user._id
       };
       
       const airdrop = new Airdrop(airdropData);
       const savedAirdrop = await airdrop.save();
+
+      // Create daily task if airdrop is marked as daily task
+      if (savedAirdrop.isDailyTask) {
+        try {
+          await createDailyTaskForAirdrop(savedAirdrop, req.user._id);
+        } catch (taskError) {
+          console.error('Error creating daily task:', taskError);
+          // Don't fail the airdrop creation if task creation fails
+        }
+      }
+
+      // Increment usage count for used tags
+      if (savedAirdrop.tags && savedAirdrop.tags.length > 0) {
+        try {
+          await Promise.all(
+            savedAirdrop.tags.map(async (tagName) => {
+              const tag = await UserTag.findOne({
+                name: tagName.toLowerCase(),
+                userId: req.user._id
+              });
+              if (tag) {
+                await tag.incrementUsage();
+              }
+            })
+          );
+        } catch (tagError) {
+          console.error('Error updating tag usage:', tagError);
+          // Don't fail the airdrop creation if tag update fails
+        }
+      }
       
       res.status(201).json({
         success: true,
@@ -272,7 +367,7 @@ router.put('/:id',
       // First check if airdrop exists and user owns it
       const existingAirdrop = await Airdrop.findById(req.params.id);
       
-      if (!existingAirdrop || !existingAirdrop.isActive) {
+      if (!existingAirdrop) {
         return res.status(404).json({
           success: false,
           message: 'Airdrop not found'
@@ -280,12 +375,15 @@ router.put('/:id',
       }
       
       // Check if user owns this airdrop
-      if (!existingAirdrop.createdBy.equals(req.user._id)) {
+      if (!existingAirdrop.user.equals(req.user._id)) {
         return res.status(403).json({
           success: false,
           message: 'You can only update your own airdrops'
         });
       }
+      
+      // Store the previous isDailyTask state
+      const wasDaily = existingAirdrop.isDailyTask;
       
       const airdrop = await Airdrop.findByIdAndUpdate(
         req.params.id,
@@ -297,11 +395,43 @@ router.put('/:id',
         }
       );
 
-      if (!airdrop || !airdrop.isActive) {
+      if (!airdrop) {
         return res.status(404).json({
           success: false,
           message: 'Airdrop not found'
         });
+      }
+
+      // Handle daily task changes
+      if (airdrop.isDailyTask && !wasDaily) {
+        // Airdrop was changed to daily task - create daily task
+        try {
+          await createDailyTaskForAirdrop(airdrop, req.user._id);
+        } catch (taskError) {
+          console.error('Error creating daily task:', taskError);
+        }
+      } else if (!airdrop.isDailyTask && wasDaily) {
+        // Airdrop was removed from daily task - remove daily task
+        try {
+          await removeDailyTaskForAirdrop(airdrop._id, req.user._id);
+        } catch (taskError) {
+          console.error('Error removing daily task:', taskError);
+        }
+      } else if (airdrop.isDailyTask && wasDaily) {
+        // Update existing daily task if the airdrop details changed
+        try {
+          await Task.updateMany(
+            { airdrop: airdrop._id, user: req.user._id, isDaily: true },
+            {
+              title: airdrop.dailyTaskNote || `Daily task for ${airdrop.name}`,
+              description: airdrop.description,
+              project: airdrop.name,
+              category: airdrop.type || 'Mainnet'
+            }
+          );
+        } catch (taskError) {
+          console.error('Error updating daily task:', taskError);
+        }
       }
 
       res.json({
@@ -321,16 +451,18 @@ router.put('/:id',
   }
 );
 
-// DELETE /api/airdrops/:id - Soft delete airdrop
+// DELETE /api/airdrops/:id - Soft delete airdrop (user's own only)
 router.delete('/:id',
+  protect,
   param('id').isMongoId().withMessage('Invalid airdrop ID'),
   handleValidationErrors,
   async (req, res) => {
     try {
-      const airdrop = await Airdrop.findByIdAndUpdate(
-        req.params.id,
-        { isActive: false },
-        { new: true }
+      const airdrop = await Airdrop.findOneAndDelete(
+        { 
+          _id: req.params.id, 
+          user: req.user._id 
+        }
       );
 
       if (!airdrop) {
@@ -390,7 +522,7 @@ router.patch('/:id/complete',
     try {
       const airdrop = await Airdrop.findById(req.params.id);
       
-      if (!airdrop || !airdrop.isActive) {
+      if (!airdrop) {
         return res.status(404).json({
           success: false,
           message: 'Airdrop not found'

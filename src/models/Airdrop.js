@@ -13,33 +13,80 @@ const airdropSchema = new mongoose.Schema({
     required: [true, 'Description is required'],
     maxlength: [1000, 'Description cannot be more than 1000 characters']
   },
+  ecosystem: {
+    type: String,
+    enum: ['Ethereum', 'Solana', 'Polygon', 'Arbitrum', 'Optimism', 'BSC', 'Avalanche', 'Multi-chain'],
+    default: 'Ethereum'
+  },
+  type: {
+    type: String,
+    enum: ['Testnet', 'Mainnet', 'Telegram', 'Web3', 'Social'],
+    default: 'Mainnet'
+  },
   status: {
     type: String,
-    enum: {
-      values: ['upcoming', 'active', 'completed', 'ended'],
-      message: 'Status must be one of: upcoming, active, completed, ended'
-    },
-    default: 'upcoming'
+    default: 'Farming'
   },
-  startDate: {
-    type: Date,
+  deadline: {
+    type: String,
+    trim: true,
+    default: 'TBA'
+  },
+  estimatedValue: {
+    type: String,
+    trim: true
+  },
+  priority: {
+    type: mongoose.Schema.Types.Mixed,
+    default: 'Medium'
+  },
+  officialLink: {
+    type: String,
+    required: [true, 'Official link is required'],
+    trim: true,
     validate: {
-      validator: function(value) {
-        // Start date should be in the future or today
-        return !value || value >= new Date().setHours(0,0,0,0);
+      validator: function(url) {
+        return /^https?:\/\/.+/.test(url);
       },
-      message: 'Start date cannot be in the past'
+      message: 'Official link must be a valid URL starting with http:// or https://'
     }
   },
-  endDate: {
-    type: Date,
+  referralLink: {
+    type: String,
+    trim: true,
     validate: {
-      validator: function(value) {
-        // End date should be after start date
-        return !value || !this.startDate || value > this.startDate;
+      validator: function(url) {
+        return !url || /^https?:\/\/.+/.test(url);
       },
-      message: 'End date must be after start date'
+      message: 'Referral link must be a valid URL starting with http:// or https://'
     }
+  },
+  logoUrl: {
+    type: String,
+    trim: true
+  },
+  bannerUrl: {
+    type: String,
+    trim: true
+  },
+  tags: [{
+    type: String,
+    trim: true,
+    lowercase: true
+  }],
+  notes: {
+    type: String,
+    trim: true,
+    maxlength: [2000, 'Notes cannot be more than 2000 characters']
+  },
+  isDailyTask: {
+    type: Boolean,
+    default: false
+  },
+  dailyTaskNote: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Daily task note cannot be more than 500 characters']
   },
   tokenSymbol: {
     type: String,
@@ -47,71 +94,72 @@ const airdropSchema = new mongoose.Schema({
     trim: true,
     maxlength: [10, 'Token symbol cannot be more than 10 characters']
   },
-  totalReward: {
-    type: String,
-    trim: true
+  startDate: {
+    type: Date
   },
-  requirements: [{
-    type: String,
-    trim: true,
-    maxlength: [200, 'Each requirement cannot be more than 200 characters']
-  }],
-  website: {
-    type: String,
-    trim: true,
-    validate: {
-      validator: function(url) {
-        return !url || /^https?:\/\/.+/.test(url);
-      },
-      message: 'Website must be a valid URL starting with http:// or https://'
+  socialMedia: {
+    twitter: {
+      type: String,
+      trim: true,
+      validate: {
+        validator: function(url) {
+          return !url || /^https?:\/\/(www\.)?(twitter\.com|x\.com)\/.+/.test(url);
+        },
+        message: 'Twitter must be a valid Twitter/X URL'
+      }
+    },
+    telegram: {
+      type: String,
+      trim: true,
+      validate: {
+        validator: function(url) {
+          return !url || /^https?:\/\/(www\.)?t\.me\/.+/.test(url);
+        },
+        message: 'Telegram must be a valid Telegram URL'
+      }
+    },
+    discord: {
+      type: String,
+      trim: true,
+      validate: {
+        validator: function(url) {
+          return !url || /^https?:\/\/(www\.)?discord\.(gg|com)\/.+/.test(url);
+        },
+        message: 'Discord must be a valid Discord URL'
+      }
+    },
+    medium: {
+      type: String,
+      trim: true,
+      validate: {
+        validator: function(url) {
+          return !url || /^https?:\/\/(www\.)?medium\.com\/.+/.test(url);
+        },
+        message: 'Medium must be a valid Medium URL'
+      }
+    },
+    github: {
+      type: String,
+      trim: true,
+      validate: {
+        validator: function(url) {
+          return !url || /^https?:\/\/(www\.)?github\.com\/.+/.test(url);
+        },
+        message: 'GitHub must be a valid GitHub URL'
+      }
+    },
+    website: {
+      type: String,
+      trim: true,
+      validate: {
+        validator: function(url) {
+          return !url || /^https?:\/\/.+/.test(url);
+        },
+        message: 'Website must be a valid URL starting with http:// or https://'
+      }
     }
   },
-  twitter: {
-    type: String,
-    trim: true,
-    validate: {
-      validator: function(url) {
-        return !url || /^https?:\/\/(www\.)?(twitter\.com|x\.com)\/.+/.test(url);
-      },
-      message: 'Twitter must be a valid Twitter/X URL'
-    }
-  },
-  discord: {
-    type: String,
-    trim: true,
-    validate: {
-      validator: function(url) {
-        return !url || /^https?:\/\/(www\.)?discord\.(gg|com)\/.+/.test(url);
-      },
-      message: 'Discord must be a valid Discord URL'
-    }
-  },
-  telegram: {
-    type: String,
-    trim: true,
-    validate: {
-      validator: function(url) {
-        return !url || /^https?:\/\/(www\.)?t\.me\/.+/.test(url);
-      },
-      message: 'Telegram must be a valid Telegram URL'
-    }
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  priority: {
-    type: Number,
-    min: [1, 'Priority must be at least 1'],
-    max: [5, 'Priority cannot be more than 5'],
-    default: 3
-  },
-  tags: [{
-    type: String,
-    trim: true,
-    lowercase: true
-  }],
-  createdBy: {
+  user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
@@ -123,63 +171,73 @@ const airdropSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Virtual field for days remaining
-airdropSchema.virtual('daysRemaining').get(function() {
-  if (!this.endDate) return null;
-  
-  const now = new Date();
-  const timeDiff = this.endDate.getTime() - now.getTime();
-  const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-  
-  return daysDiff > 0 ? daysDiff : 0;
+// Virtual field for network (alias for ecosystem)
+airdropSchema.virtual('network').get(function() {
+  return this.ecosystem;
 });
 
-// Virtual field for duration in days
-airdropSchema.virtual('duration').get(function() {
-  if (!this.startDate || !this.endDate) return null;
+// Virtual field for category (derived from ecosystem)
+airdropSchema.virtual('category').get(function() {
+  const categoryMap = {
+    'Ethereum': 'DeFi',
+    'Solana': 'DeFi', 
+    'Polygon': 'DeFi',
+    'Arbitrum': 'Infrastructure',
+    'Optimism': 'Infrastructure',
+    'BSC': 'DeFi',
+    'Avalanche': 'DeFi',
+    'Multi-chain': 'Infrastructure'
+  };
+  return categoryMap[this.ecosystem] || 'Other';
+});
+
+// Virtual field for tasks completed/total (mock data for now)
+airdropSchema.virtual('tasksCompleted').get(function() {
+  // This would be calculated based on actual task completion
+  return Math.floor(Math.random() * 10) + 1;
+});
+
+airdropSchema.virtual('totalTasks').get(function() {
+  // This would be the total number of tasks for this airdrop
+  return Math.floor(Math.random() * 5) + this.tasksCompleted;
+});
+
+// Virtual field for last updated (human readable)
+airdropSchema.virtual('lastUpdated').get(function() {
+  const now = new Date();
+  const diffMs = now - this.updatedAt;
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffHours / 24);
   
-  const timeDiff = this.endDate.getTime() - this.startDate.getTime();
-  return Math.ceil(timeDiff / (1000 * 3600 * 24));
+  if (diffDays > 0) {
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  } else if (diffHours > 0) {
+    return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  } else {
+    return 'Just now';
+  }
 });
 
 // Index for better query performance
 airdropSchema.index({ status: 1, createdAt: -1 });
-airdropSchema.index({ endDate: 1 });
+airdropSchema.index({ user: 1, createdAt: -1 });
 airdropSchema.index({ tokenSymbol: 1 });
+airdropSchema.index({ ecosystem: 1 });
+airdropSchema.index({ tags: 1 });
 
-// Pre-save middleware to update status based on dates
-airdropSchema.pre('save', function(next) {
-  const now = new Date();
-  
-  if (this.startDate && this.endDate) {
-    if (now < this.startDate) {
-      this.status = 'upcoming';
-    } else if (now >= this.startDate && now <= this.endDate) {
-      this.status = 'active';
-    } else if (now > this.endDate) {
-      this.status = 'ended';
-    }
-  }
-  
-  next();
-});
-
-// Static method to get airdrops by status
-airdropSchema.statics.getByStatus = function(status) {
-  return this.find({ status, isActive: true }).sort({ createdAt: -1 });
+// Static method to get airdrops by user
+airdropSchema.statics.getByUser = function(userId) {
+  return this.find({ user: userId }).sort({ createdAt: -1 });
 };
 
-// Static method to get active airdrops
-airdropSchema.statics.getActive = function() {
-  return this.find({ 
-    status: 'active', 
-    isActive: true 
-  }).sort({ priority: -1, createdAt: -1 });
+// Static method to get airdrops by status for a user
+airdropSchema.statics.getByUserAndStatus = function(userId, status) {
+  return this.find({ user: userId, status }).sort({ createdAt: -1 });
 };
 
 // Instance method to mark as completed
 airdropSchema.methods.markCompleted = function() {
-  this.status = 'completed';
+  this.status = 'Completed';
   return this.save();
 };
 

@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
+const UserTag = require('../models/UserTag');
 const { 
   protect, 
   loginLimiter, 
@@ -167,6 +168,14 @@ router.post('/signup', registerLimiter, validateSignup, handleValidationErrors, 
     // Generate email verification token
     const verifyToken = newUser.createEmailVerificationToken();
     await newUser.save({ validateBeforeSave: false });
+
+    // Create default tags for the new user
+    try {
+      await UserTag.createDefaultTags(newUser._id);
+    } catch (tagError) {
+      console.error('Error creating default tags:', tagError);
+      // Don't fail user creation if tag creation fails
+    }
 
     // TODO: Send verification email
     // await sendVerificationEmail(newUser.email, verifyToken);
@@ -450,7 +459,8 @@ router.get('/me', protect, async (req, res) => {
           preferences: req.user.preferences,
           stats: req.user.stats,
           lastLoginAt: req.user.lastLoginAt,
-          createdAt: req.user.createdAt
+          createdAt: req.user.createdAt,
+          bio: req.user.bio
         }
       }
     });
@@ -459,6 +469,230 @@ router.get('/me', protect, async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Something went wrong fetching user data'
+    });
+  }
+});
+
+// @route   GET /api/auth/profile
+// @desc    Get current user profile (alias for /me)
+// @access  Private
+router.get('/profile', protect, async (req, res) => {
+  try {
+    res.status(200).json({
+      success: true,
+      data: {
+        id: req.user._id,
+        firstName: req.user.firstName,
+        lastName: req.user.lastName,
+        fullName: req.user.fullName,
+        email: req.user.email,
+        username: req.user.username,
+        avatar: req.user.avatar,
+        role: req.user.role,
+        isEmailVerified: req.user.isEmailVerified,
+        preferences: req.user.preferences,
+        stats: req.user.stats,
+        lastLoginAt: req.user.lastLoginAt,
+        createdAt: req.user.createdAt,
+        bio: req.user.bio
+      }
+    });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Something went wrong fetching profile data'
+    });
+  }
+});
+
+// @route   PUT /api/auth/profile
+// @desc    Update user profile
+// @access  Private
+router.put('/profile', protect, [
+  body('firstName')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 50 })
+    .withMessage('First name must be between 1 and 50 characters'),
+  body('lastName')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 50 })
+    .withMessage('Last name must be between 1 and 50 characters'),
+  body('username')
+    .optional()
+    .trim()
+    .isLength({ min: 3, max: 30 })
+    .withMessage('Username must be between 3 and 30 characters')
+    .matches(/^[a-zA-Z0-9_]+$/)
+    .withMessage('Username can only contain letters, numbers, and underscores'),
+  body('bio')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Bio must be less than 500 characters'),
+  body('email')
+    .optional()
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Please provide a valid email')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { firstName, lastName, username, bio, email } = req.body;
+
+    // Check if username is already taken (if provided)
+    if (username && username !== req.user.username) {
+      const existingUser = await User.findOne({ username });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Username is already taken'
+        });
+      }
+    }
+
+    // Check if email is already taken (if provided)
+    if (email && email !== req.user.email) {
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email is already registered'
+        });
+      }
+    }
+
+    // Update user fields
+    if (firstName !== undefined) req.user.firstName = firstName;
+    if (lastName !== undefined) req.user.lastName = lastName;
+    if (username !== undefined) req.user.username = username;
+    if (bio !== undefined) req.user.bio = bio;
+    if (email !== undefined) {
+      req.user.email = email;
+      req.user.isEmailVerified = false; // Reset verification if email changes
+    }
+
+    await req.user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: {
+        id: req.user._id,
+        firstName: req.user.firstName,
+        lastName: req.user.lastName,
+        email: req.user.email,
+        username: req.user.username,
+        avatar: req.user.avatar,
+        bio: req.user.bio
+      }
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Something went wrong updating profile'
+    });
+  }
+});
+
+// @route   PUT /api/auth/change-password
+// @desc    Change user password
+// @access  Private
+router.put('/change-password', protect, [
+  body('currentPassword')
+    .isLength({ min: 1 })
+    .withMessage('Current password is required'),
+  body('newPassword')
+    .isLength({ min: 8 })
+    .withMessage('New password must be at least 8 characters long')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+    .withMessage('New password must contain at least one uppercase letter, one lowercase letter, one number, and one special character')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    // Check current password
+    const isCurrentPasswordCorrect = await req.user.matchPassword(currentPassword);
+    if (!isCurrentPasswordCorrect) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+
+    // Update password
+    req.user.password = newPassword;
+    await req.user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Something went wrong changing password'
+    });
+  }
+});
+
+// @route   PUT /api/auth/avatar
+// @desc    Update user avatar
+// @access  Private
+router.put('/avatar', protect, [
+  body('avatar')
+    .isString()
+    .withMessage('Avatar must be a valid base64 string')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { avatar } = req.body;
+
+    // Update avatar
+    req.user.avatar = avatar;
+    await req.user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Avatar updated successfully',
+      data: {
+        avatar: req.user.avatar
+      }
+    });
+  } catch (error) {
+    console.error('Update avatar error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Something went wrong updating avatar'
     });
   }
 });

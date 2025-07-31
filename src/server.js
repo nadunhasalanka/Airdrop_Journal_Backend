@@ -12,6 +12,8 @@ require('dotenv').config();
 const airdropRoutes = require('./routes/airdrops');
 const userRoutes = require('./routes/users');
 const authRoutes = require('./routes/auth');
+const userTagRoutes = require('./routes/userTags');
+const taskRoutes = require('./routes/tasks');
 
 // Create Express app
 const app = express();
@@ -22,7 +24,7 @@ app.use(helmet());
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: process.env.CORS_ORIGIN || ['http://localhost:3000', 'http://localhost:8080', 'http://localhost:8081'],
   credentials: true
 }));
 
@@ -51,6 +53,8 @@ app.use(cookieParser());
 app.use('/api/auth', authRoutes);
 app.use('/api/airdrops', airdropRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/tags', userTagRoutes);
+app.use('/api/tasks', taskRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
