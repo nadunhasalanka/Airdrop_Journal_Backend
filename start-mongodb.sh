@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Start MongoDB container for Airdrop Journal
-echo "🚀 Starting MongoDB container for Airdrop Journal..."
+echo "Starting MongoDB container for Airdrop Journal..."
 
 docker run -d \
   --name airdrop_journal_mongodb \
