@@ -59,12 +59,6 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
-  isEmailVerified: {
-    type: Boolean,
-    default: false
-  },
-  emailVerificationToken: String,
-  emailVerificationExpire: Date,
   passwordResetToken: String,
   passwordResetExpire: Date,
   passwordChangedAt: Date,
@@ -103,7 +97,6 @@ const userSchema = new mongoose.Schema({
 // Indexes for better performance
 userSchema.index({ email: 1 });
 userSchema.index({ username: 1 });
-userSchema.index({ emailVerificationToken: 1 });
 userSchema.index({ passwordResetToken: 1 });
 
 // Virtual for full name
@@ -178,20 +171,6 @@ userSchema.methods.createPasswordResetToken = function() {
   this.passwordResetExpire = Date.now() + parseInt(process.env.PASSWORD_RESET_EXPIRE) * 60 * 1000; // 10 minutes
   
   return resetToken;
-};
-
-// Instance method to generate email verification token
-userSchema.methods.createEmailVerificationToken = function() {
-  const verificationToken = crypto.randomBytes(32).toString('hex');
-  
-  this.emailVerificationToken = crypto
-    .createHash('sha256')
-    .update(verificationToken)
-    .digest('hex');
-  
-  this.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-  
-  return verificationToken;
 };
 
 // Instance method to handle failed login attempts

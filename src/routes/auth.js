@@ -7,8 +7,7 @@ const {
   protect, 
   loginLimiter, 
   registerLimiter, 
-  forgotPasswordLimiter,
-  resendVerificationLimiter 
+  forgotPasswordLimiter
 } = require('../middleware/auth');
 
 const router = express.Router();
@@ -165,10 +164,6 @@ router.post('/signup', registerLimiter, validateSignup, handleValidationErrors, 
       password
     });
 
-    // Generate email verification token
-    const verifyToken = newUser.createEmailVerificationToken();
-    await newUser.save({ validateBeforeSave: false });
-
     // Create default tags for the new user
     try {
       await UserTag.createDefaultTags(newUser._id);
@@ -177,10 +172,7 @@ router.post('/signup', registerLimiter, validateSignup, handleValidationErrors, 
       // Don't fail user creation if tag creation fails
     }
 
-    // TODO: Send verification email
-    // await sendVerificationEmail(newUser.email, verifyToken);
-
-    createSendToken(newUser, 201, res, 'User registered successfully! Please check your email to verify your account.');
+    createSendToken(newUser, 201, res, 'User registered successfully!');
   } catch (error) {
     console.error('Signup error:', error);
     
@@ -364,80 +356,6 @@ router.patch('/update-password', protect, [
   }
 });
 
-// @route   POST /api/auth/verify-email/:token
-// @desc    Verify email with token
-// @access  Public
-router.post('/verify-email/:token', async (req, res) => {
-  try {
-    const hashedToken = crypto
-      .createHash('sha256')
-      .update(req.params.token)
-      .digest('hex');
-
-    const user = await User.findOne({
-      emailVerificationToken: hashedToken,
-      emailVerificationExpire: { $gt: Date.now() },
-      isActive: true
-    });
-
-    if (!user) {
-      return res.status(400).json({
-        status: 'fail',
-        message: 'Token is invalid or has expired'
-      });
-    }
-
-    // Verify email
-    user.isEmailVerified = true;
-    user.emailVerificationToken = undefined;
-    user.emailVerificationExpire = undefined;
-    await user.save();
-
-    res.status(200).json({
-      status: 'success',
-      message: 'Email verified successfully!'
-    });
-  } catch (error) {
-    console.error('Email verification error:', error);
-    res.status(500).json({
-      status: 'error',
-      message: 'Something went wrong during email verification'
-    });
-  }
-});
-
-// @route   POST /api/auth/resend-verification
-// @desc    Resend email verification
-// @access  Private
-router.post('/resend-verification', protect, resendVerificationLimiter, async (req, res) => {
-  try {
-    if (req.user.isEmailVerified) {
-      return res.status(400).json({
-        status: 'fail',
-        message: 'Email is already verified'
-      });
-    }
-
-    // Generate new verification token
-    const verifyToken = req.user.createEmailVerificationToken();
-    await req.user.save({ validateBeforeSave: false });
-
-    // TODO: Send verification email
-    // await sendVerificationEmail(req.user.email, verifyToken);
-
-    res.status(200).json({
-      status: 'success',
-      message: 'Verification email sent!'
-    });
-  } catch (error) {
-    console.error('Resend verification error:', error);
-    res.status(500).json({
-      status: 'error',
-      message: 'Something went wrong sending verification email'
-    });
-  }
-});
-
 // @route   GET /api/auth/me
 // @desc    Get current user
 // @access  Private
@@ -455,7 +373,6 @@ router.get('/me', protect, async (req, res) => {
           username: req.user.username,
           avatar: req.user.avatar,
           role: req.user.role,
-          isEmailVerified: req.user.isEmailVerified,
           preferences: req.user.preferences,
           stats: req.user.stats,
           lastLoginAt: req.user.lastLoginAt,
@@ -489,7 +406,6 @@ router.get('/profile', protect, async (req, res) => {
         username: req.user.username,
         avatar: req.user.avatar,
         role: req.user.role,
-        isEmailVerified: req.user.isEmailVerified,
         preferences: req.user.preferences,
         stats: req.user.stats,
         lastLoginAt: req.user.lastLoginAt,
@@ -579,7 +495,6 @@ router.put('/profile', protect, [
     if (bio !== undefined) req.user.bio = bio;
     if (email !== undefined) {
       req.user.email = email;
-      req.user.isEmailVerified = false; // Reset verification if email changes
     }
 
     await req.user.save();
@@ -632,7 +547,7 @@ router.put('/change-password', protect, [
     const { currentPassword, newPassword } = req.body;
 
     // Check current password
-    const isCurrentPasswordCorrect = await req.user.matchPassword(currentPassword);
+    const isCurrentPasswordCorrect = await req.user.comparePassword(currentPassword);
     if (!isCurrentPasswordCorrect) {
       return res.status(400).json({
         success: false,

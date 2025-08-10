@@ -44,6 +44,19 @@ const createDailyTaskForAirdrop = async (airdrop, userId) => {
   }
 };
 
+// Helper function to remove all tasks for airdrop
+const removeAllTasksForAirdrop = async (airdropId, userId) => {
+  try {
+    await Task.deleteMany({
+      airdrop: airdropId,
+      user: userId
+    });
+  } catch (error) {
+    console.error('Error removing tasks for airdrop:', error);
+    throw error;
+  }
+};
+
 // Helper function to remove daily task for airdrop
 const removeDailyTaskForAirdrop = async (airdropId, userId) => {
   try {
@@ -451,14 +464,15 @@ router.put('/:id',
   }
 );
 
-// DELETE /api/airdrops/:id - Soft delete airdrop (user's own only)
+// DELETE /api/airdrops/:id - Delete airdrop and all related tasks (user's own only)
 router.delete('/:id',
   protect,
   param('id').isMongoId().withMessage('Invalid airdrop ID'),
   handleValidationErrors,
   async (req, res) => {
     try {
-      const airdrop = await Airdrop.findOneAndDelete(
+      // First, verify the airdrop exists and belongs to the user
+      const airdrop = await Airdrop.findOne(
         { 
           _id: req.params.id, 
           user: req.user._id 
@@ -472,9 +486,20 @@ router.delete('/:id',
         });
       }
 
+      // Delete all related tasks first
+      await removeAllTasksForAirdrop(req.params.id, req.user._id);
+
+      // Then delete the airdrop
+      await Airdrop.findOneAndDelete(
+        { 
+          _id: req.params.id, 
+          user: req.user._id 
+        }
+      );
+
       res.json({
         success: true,
-        message: 'Airdrop deleted successfully'
+        message: 'Airdrop and related tasks deleted successfully'
       });
 
     } catch (error) {
