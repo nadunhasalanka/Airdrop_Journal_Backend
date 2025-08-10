@@ -2,25 +2,22 @@
 
 A Node.js/Express backend API for managing cryptocurrency airdrops with MongoDB database.
 
-## 🚀 Features
+## Features
 
 - **CRUD Operations** for airdrops
 - **MongoDB** database with Mongoose ODM
-- **Input validation** with express-validator
 - **Rate limiting** and security middleware
-- **Pagination** and filtering
-- **Search functionality**
+- **Search functionality** for in app airdrops
 - **Status-based queries**
-- **Soft delete** functionality
 - **Statistics** endpoints
 
 ## 📋 Prerequisites
 
 - Node.js (v16 or higher)
-- Docker (for MongoDB)
+- Docker (for MongoDB or can setup any other way you like)
 - npm or yarn
 
-## 🛠️ Installation
+## Installation
 
 1. **Clone the repository**
 ```bash
@@ -36,21 +33,22 @@ npm install
 3. **Set up environment variables**
 ```bash
 cp .env.example .env
-# Edit .env with your configuration
+# Make shuwer to edit the .env with your configuration
 ```
 
-4. **Start MongoDB using Docker**
+4. **Start MongoDB using Docker(if you prefer this way)**
 ```bash
 cd ..
+chmod +x setup-mongodb.sh
 ./setup-mongodb.sh
 ```
 
-5. **Start the development server**
+5. **Start the bakcend server**
 ```bash
 npm run dev
 ```
 
-## 🔧 Environment Variables
+## Environment Variables
 
 ```env
 NODE_ENV=development
@@ -67,7 +65,7 @@ RATE_LIMIT_MAX_REQUESTS=100
 - `GET /health` - Server health status
 
 ### Airdrops
-- `GET /api/airdrops` - Get all airdrops (with pagination & filtering)
+- `GET /api/airdrops` - Get all airdrops
 - `GET /api/airdrops/stats` - Get airdrop statistics
 - `GET /api/airdrops/:id` - Get specific airdrop
 - `POST /api/airdrops` - Create new airdrop
@@ -76,17 +74,7 @@ RATE_LIMIT_MAX_REQUESTS=100
 - `GET /api/airdrops/status/:status` - Get airdrops by status
 - `PATCH /api/airdrops/:id/complete` - Mark airdrop as completed
 
-### Query Parameters (GET /api/airdrops)
-- `status` - Filter by status (upcoming, active, completed, ended)
-- `tokenSymbol` - Filter by token symbol
-- `priority` - Filter by priority (1-5)
-- `page` - Page number (default: 1)
-- `limit` - Items per page (default: 10)
-- `sortBy` - Sort field (default: createdAt)
-- `sortOrder` - Sort direction (asc/desc, default: desc)
-- `search` - Search in name, description, tokenSymbol
-
-## 📊 Data Model
+## Data Model
 
 ### Airdrop Schema
 ```javascript
@@ -111,18 +99,10 @@ RATE_LIMIT_MAX_REQUESTS=100
 }
 ```
 
-## 🔄 Scripts
-
-```bash
-npm start       # Start production server
-npm run dev     # Start development server with nodemon
-npm test        # Run tests (not implemented)
-npm run lint    # Run linter (not implemented)
-```
 
 ## 🐳 Docker MongoDB
 
-Use the provided script to start MongoDB:
+Use the provided script to start MongoDB (From above):
 ```bash
 ./setup-mongodb.sh
 ```
@@ -133,47 +113,7 @@ MongoDB will be available at:
 - **Username**: admin
 - **Password**: airdrop123
 
-## 📝 Example API Usage
-
-### Create a new airdrop
-```bash
-curl -X POST http://localhost:3001/api/airdrops \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Sample Airdrop",
-    "description": "A sample cryptocurrency airdrop",
-    "status": "upcoming",
-    "tokenSymbol": "SAMPLE",
-    "totalReward": "1000 SAMPLE",
-    "requirements": ["Follow Twitter", "Join Discord"],
-    "website": "https://example.com",
-    "priority": 4
-  }'
-```
-
-### Get all airdrops with filtering
-```bash
-curl "http://localhost:3001/api/airdrops?status=active&page=1&limit=5&search=bitcoin"
-```
-
-## 🛡️ Security Features
-
-- Helmet for security headers
-- CORS configuration
-- Rate limiting
-- Input validation
-- MongoDB injection protection
-- Error handling middleware
-
-## 📈 Performance Features
-
-- Database indexing
-- Connection pooling
-- Response compression
-- Efficient pagination
-- Optimized queries
-
-## 🐛 Error Handling
+## Error Handling
 
 The API returns consistent error responses:
 ```json
@@ -184,11 +124,5 @@ The API returns consistent error responses:
 }
 ```
 
-## 🚦 Status Codes
-
-- `200` - Success
-- `201` - Created
-- `400` - Bad Request
-- `404` - Not Found
-- `429` - Too Many Requests
-- `500` - Internal Server Error
+#### Front-End repository:
+https://github.com/nadunhasalanka/Airdrop_Journal_Frontend
